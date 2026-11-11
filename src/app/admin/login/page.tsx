@@ -2,9 +2,22 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { crearClienteNavegador } from "@/lib/supabase/client";
+
+/** Aviso cuando <EnlaceAuth /> rechaza un enlace del correo. */
+function AvisoEnlaceVencido() {
+  const params = useSearchParams();
+  if (params.get("enlace") !== "vencido") return null;
+  return (
+    <p className="mt-4 text-sm text-red-600">
+      El enlace del correo venció o ya fue usado. Pide uno nuevo con “¿Olvidaste
+      tu contraseña?”.
+    </p>
+  );
+}
 
 export default function PaginaLogin() {
   const router = useRouter();
@@ -78,6 +91,11 @@ export default function PaginaLogin() {
         </div>
 
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+        {!error && (
+          <Suspense fallback={null}>
+            <AvisoEnlaceVencido />
+          </Suspense>
+        )}
 
         <button
           type="submit"
@@ -86,6 +104,13 @@ export default function PaginaLogin() {
         >
           {cargando ? "Ingresando..." : "Ingresar"}
         </button>
+
+        <Link
+          href="/admin/recuperar"
+          className="mt-4 block text-center text-sm text-museo-medio hover:underline"
+        >
+          ¿Olvidaste tu contraseña?
+        </Link>
       </form>
     </main>
   );

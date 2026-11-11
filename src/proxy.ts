@@ -2,7 +2,8 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Protege todo lo que está bajo /admin (excepto /admin/login).
+ * Protege todo lo que está bajo /admin (excepto /admin/login y
+ * /admin/recuperar).
  * Como el proyecto define un único rol de administrador, basta con
  * verificar que exista una sesión válida de Supabase Auth: cualquier
  * cuenta creada en el proyecto de Supabase es, por definición, el
@@ -36,7 +37,10 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const esLogin = pathname === "/admin/login";
 
-  if (!user && !esLogin) {
+  // Pedir el correo de recuperación tiene que funcionar sin sesión.
+  const esPublica = esLogin || pathname === "/admin/recuperar";
+
+  if (!user && !esPublica) {
     const url = request.nextUrl.clone();
     url.pathname = "/admin/login";
     return NextResponse.redirect(url);
