@@ -52,6 +52,12 @@ export function AdminNav() {
           >
             Ver sitio público
           </Link>
+          <Link
+            href="/admin/nueva-clave"
+            className="text-white/60 hover:text-white"
+          >
+            Cambiar contraseña
+          </Link>
           <button
             onClick={cerrarSesion}
             className="rounded border border-white/30 px-3 py-1.5 text-white/80 hover:border-museo-dorado hover:text-museo-dorado"

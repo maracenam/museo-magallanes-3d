@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { EnlaceAuth } from "@/components/EnlaceAuth";
 
 export const metadata: Metadata = {
   title: "Visualizador 3D | Museo Regional de Magallanes",
@@ -33,7 +34,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>{children}</body>
+      <body>
+        <EnlaceAuth />
+        {children}
+      </body>
     </html>
   );
 }
