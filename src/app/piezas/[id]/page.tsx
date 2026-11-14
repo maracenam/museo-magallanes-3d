@@ -1,80 +1,130 @@
+import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Header } from "@/components/Header";
+import { ArrowLeft, ExternalLink } from "lucide-react";
+import { PaginaPublica } from "@/components/PaginaPublica";
 import { Viewer3D } from "@/components/Viewer3D";
 import { FichaTecnica } from "@/components/FichaTecnica";
-import { crearClienteServidor } from "@/lib/supabase/server";
-import type { Pieza } from "@/lib/types";
+import { obtenerPiezaPublicada } from "@/lib/piezas";
+import { tituloDePieza } from "@/lib/ficha";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const pieza = await obtenerPiezaPublicada(id);
+  if (!pieza) return { title: "Pieza no encontrada" };
+
+  const descripcion = pieza.ficha["Descripción"];
+  return {
+    title: tituloDePieza(pieza),
+    description: descripcion ? descripcion.slice(0, 160) : undefined,
+    openGraph: pieza.imagen_url ? { images: [pieza.imagen_url] } : undefined,
+  };
+}
+
 export default async function PaginaPieza({ params }: Props) {
   const { id } = await params;
-  const supabase = await crearClienteServidor();
-  const { data: pieza } = await supabase
-    .from("piezas")
-    .select("*")
-    .eq("id", id)
-    .eq("estado", "publicada") // el público solo puede ver piezas publicadas
-    .single<Pieza>();
-
+  const pieza = await obtenerPiezaPublicada(id);
   if (!pieza) notFound();
 
-  const titulo = pieza.titulo || pieza.ficha["Título"] || "Pieza sin título";
-  const institucion =
-    pieza.ficha["Institución"] || "Museo Regional de Magallanes";
+  const titulo = tituloDePieza(pieza);
+  const descripcion = pieza.ficha["Descripción"];
+  const objeto = pieza.ficha["Objeto"];
+  const coleccion = pieza.ficha["Colección"];
+  const resumen = [
+    objeto !== titulo && objeto,
+    coleccion && `Colección ${coleccion}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <main className="min-h-screen bg-white">
-      <Header />
-      <section className="mx-auto max-w-6xl px-6 py-10">
-        {/* Estructura inspirada en la ficha de SURDOC: galería a la
-            izquierda (foto + modelo 3D), panel de identificación a la
-            derecha. */}
-        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
-          {/* --- Columna izquierda: galería --- */}
-          <div className="space-y-4">
-            <div className="flex aspect-square items-center justify-center overflow-hidden rounded border border-black/10 bg-museo-crema p-4">
-              {pieza.imagen_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
+    <PaginaPublica
+      titulo={titulo}
+      migas={[{ label: "Colección digital 3D", href: "/" }, { label: titulo }]}
+    >
+      {resumen && <p className="mt-3 text-museo-suave">{resumen}</p>}
+
+      <div className="mt-8 grid grid-cols-1 gap-x-10 gap-y-10 lg:grid-cols-12">
+        {/* El modelo 3D es el protagonista: va primero y más ancho. */}
+        <div className="lg:col-span-7">
+          <h2 className="sr-only">Modelo 3D</h2>
+          <Viewer3D
+            sketchfabModelId={pieza.sketchfab_model_id}
+            titulo={titulo}
+          />
+          {pieza.sketchfab_model_id && (
+            <p className="mt-2 text-sm text-museo-suave">
+              Arrastra para girar la pieza y usa la rueda del mouse o dos dedos
+              para acercarte.
+            </p>
+          )}
+
+          {pieza.imagen_url && (
+            <figure className="mt-8">
+              <div className="flex aspect-[4/3] items-center justify-center bg-museo-superficie sm:aspect-[16/10]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={pieza.imagen_url}
-                  alt={titulo}
-                  className="h-full w-full object-contain"
+                  alt={`Fotografía de registro: ${titulo}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-contain p-4"
                 />
-              ) : (
-                <span className="text-sm text-museo-texto/40">
-                  Sin fotografía disponible
-                </span>
-              )}
-            </div>
+              </div>
+              <figcaption className="mt-2 text-sm text-museo-suave">
+                Fotografía de registro. Fuente: SURDOC.
+              </figcaption>
+            </figure>
+          )}
+        </div>
 
-            <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-museo-texto/50">
-                Modelo 3D interactivo
-              </p>
-              <Viewer3D sketchfabModelId={pieza.sketchfab_model_id} />
-            </div>
-          </div>
+        <div className="lg:col-span-5">
+          {descripcion && (
+            <section aria-labelledby="descripcion">
+              <h2 id="descripcion" className="text-lg font-bold text-black">
+                Descripción
+              </h2>
+              <p className="mt-2 max-w-[65ch]">{descripcion}</p>
+            </section>
+          )}
 
-          {/* --- Columna derecha: identificación --- */}
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-museo-texto/40">
-              {institucion}
-            </p>
-            <h2 className="mt-1 text-3xl font-extrabold text-museo-texto">
-              {titulo}
-            </h2>
-            <div className="mt-2 h-1 w-16 bg-museo-acento" />
-
-            <h3 className="mt-8 text-lg font-bold text-museo-texto">
+          <section
+            aria-labelledby="identificacion"
+            className={descripcion ? "mt-8" : ""}
+          >
+            <h2 id="identificacion" className="text-lg font-bold text-black">
               Identificación
-            </h3>
+            </h2>
             <FichaTecnica ficha={pieza.ficha} />
+          </section>
+
+          <div className="mt-6 flex flex-col items-start gap-3">
+            {pieza.surdoc_url && (
+              <a
+                href={pieza.surdoc_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 bg-black px-6 py-3 text-white transition-colors hover:bg-museo-cuerpo"
+              >
+                Ver ficha oficial en SURDOC
+                <ExternalLink size={16} aria-hidden />
+                <span className="sr-only">(se abre en una pestaña nueva)</span>
+              </a>
+            )}
+            <Link
+              href="/"
+              className="inline-flex items-center gap-1.5 font-semibold text-black hover:underline"
+            >
+              <ArrowLeft size={16} aria-hidden />
+              Volver a la colección
+            </Link>
           </div>
         </div>
-      </section>
-    </main>
+      </div>
+    </PaginaPublica>
   );
 }

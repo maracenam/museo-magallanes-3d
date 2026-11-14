@@ -1,11 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { EnlaceAuth } from "@/components/EnlaceAuth";
 
 export const metadata: Metadata = {
-  title: "Visualizador 3D | Museo Regional de Magallanes",
+  title: {
+    default: "Colección digital 3D | Museo Regional de Magallanes",
+    template: "%s | Colección digital 3D | Museo Regional de Magallanes",
+  },
   description:
-    "Catálogo patrimonial digital del Museo Regional de Magallanes: modelos 3D interactivos junto a la ficha oficial de cada pieza.",
+    "Colección digital 3D del Museo Regional de Magallanes: modelos tridimensionales interactivos junto a la ficha oficial de cada pieza.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -17,11 +24,9 @@ export default function RootLayout({
     <html lang="es">
       <head>
         {/*
-          Roboto: la tipografía que usa el tema oficial del Estado
-          (theme_snpc / museodemagallanes.gob.cl). Se carga como enlace
-          normal (no next/font) para no depender de acceso a internet
-          durante el build; el navegador del visitante la descarga en
-          tiempo real, con una alternativa segura si no carga.
+          Open Sans: la tipografía del sitio oficial del museo
+          (museodemagallanes.gob.cl). Se carga como enlace normal (no
+          next/font) para no depender de acceso a internet durante el build.
         */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
@@ -30,7 +35,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;900&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap"
           rel="stylesheet"
         />
       </head>

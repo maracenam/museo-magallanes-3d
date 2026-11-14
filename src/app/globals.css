@@ -3,13 +3,45 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Open Sans: la tipografía del sitio oficial museodemagallanes.gob.cl */
+  --font-sans: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
 }
 
 html {
   font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  @apply bg-museo-crema text-museo-texto font-sans;
+  @apply bg-museo-crema text-museo-texto font-sans antialiased;
+}
+
+/* Superficies del navegador alineadas con la paleta del museo */
+::selection {
+  background: #e0701e;
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid #e0701e;
+  outline-offset: 2px;
+}
+
+a {
+  text-underline-offset: 3px;
+}
+
+/* El menú móvil usa <details>; se oculta el marcador nativo. */
+summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
