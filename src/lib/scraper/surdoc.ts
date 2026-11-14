@@ -1,5 +1,64 @@
 import * as cheerio from "cheerio";
 import type { ResultadoPrescrapper } from "@/lib/types";
+import { esUrlImagen, esUrlSurdoc } from "@/lib/seguridad";
+
+const TIEMPO_MAXIMO_MS = 10_000;
+const TAMANO_MAXIMO = 3_000_000; // bytes de HTML
+const REDIRECCIONES_MAXIMAS = 3;
+
+/**
+ * Descarga una página de SURDOC sin salir nunca de surdoc.cl: las
+ * redirecciones se siguen a mano y cada destino se vuelve a validar
+ * (evita SSRF hacia la red interna del servidor). Con límite de tiempo y
+ * de tamaño para que una respuesta enorme o lenta no tumbe el servidor.
+ */
+async function descargarDeSurdoc(url: string): Promise<string> {
+  let actual = url;
+  for (let salto = 0; salto <= REDIRECCIONES_MAXIMAS; salto++) {
+    if (!esUrlSurdoc(actual)) throw new Error("Destino fuera de SURDOC");
+
+    const respuesta = await fetch(actual, {
+      headers: { "User-Agent": USER_AGENT, Accept: "text/html" },
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(TIEMPO_MAXIMO_MS),
+    });
+
+    if (respuesta.status >= 300 && respuesta.status < 400) {
+      const destino = respuesta.headers.get("location");
+      if (!destino) throw new Error("Redirección sin destino");
+      actual = new URL(destino, actual).toString();
+      continue;
+    }
+    if (!respuesta.ok) {
+      throw new Error(`SURDOC respondió con estado ${respuesta.status}`);
+    }
+    const tipo = respuesta.headers.get("content-type") ?? "";
+    if (!tipo.includes("text/html")) throw new Error("SURDOC no entregó HTML");
+
+    const declarado = Number(respuesta.headers.get("content-length") ?? 0);
+    if (declarado > TAMANO_MAXIMO)
+      throw new Error("Respuesta demasiado grande");
+
+    // Lectura por partes para cortar si el tamaño real supera el límite.
+    const lector = respuesta.body?.getReader();
+    if (!lector) return "";
+    const partes: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await lector.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > TAMANO_MAXIMO) {
+        await lector.cancel();
+        throw new Error("Respuesta demasiado grande");
+      }
+      partes.push(value);
+    }
+    return new TextDecoder().decode(Buffer.concat(partes));
+  }
+  throw new Error("Demasiadas redirecciones");
+}
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -50,10 +109,18 @@ const PALABRAS_CLAVE_ETIQUETA = [
   "adquisición",
 ];
 
-function normalizarUrlImagen(src: string): string {
-  if (src.startsWith("//")) return "https:" + src;
-  if (src.startsWith("/")) return "https://www.surdoc.cl" + src;
-  return src;
+/**
+ * Convierte la ruta de la imagen en URL absoluta y solo la acepta si es
+ * https de SURDOC (nunca data:, javascript: ni otros dominios).
+ */
+function normalizarUrlImagen(src: string): string | null {
+  let url: string;
+  try {
+    url = new URL(src.trim(), "https://www.surdoc.cl/").toString();
+  } catch {
+    return null;
+  }
+  return esUrlImagen(url) ? url : null;
 }
 
 function extraerImagen($: cheerio.CheerioAPI): string | null {
@@ -68,14 +135,14 @@ function extraerImagen($: cheerio.CheerioAPI): string | null {
     if (candidata) return;
     const clase = ($(el).attr("class") || "").toLowerCase();
     if (claves.some((k) => clase.includes(k))) {
-      candidata = $(el).attr("src");
+      candidata = $(el).attr("data-src") || $(el).attr("src");
     }
   });
   if (candidata) return normalizarUrlImagen(candidata);
 
   $("img").each((_, el) => {
     if (candidata) return;
-    const src = $(el).attr("src") || "";
+    const src = $(el).attr("data-src") || $(el).attr("src") || "";
     if (
       ["/files/", "/default/", "/colecciones/"].some((p) => src.includes(p))
     ) {
@@ -193,17 +260,7 @@ function extraerDeNegritas(
 export async function scrapearSurdoc(
   url: string
 ): Promise<ResultadoPrescrapper> {
-  const respuesta = await fetch(url, {
-    headers: { "User-Agent": USER_AGENT },
-    // SURDOC cambia poco: evitamos cachear resultados obsoletos entre pruebas
-    cache: "no-store",
-  });
-
-  if (!respuesta.ok) {
-    throw new Error(`SURDOC respondió con estado ${respuesta.status}`);
-  }
-
-  const html = await respuesta.text();
+  const html = await descargarDeSurdoc(url);
   const $ = cheerio.load(html);
 
   const ficha: Record<string, string> = {};
@@ -232,15 +289,4 @@ export async function scrapearSurdoc(
   );
 
   return { ficha, imagen_url, campos_faltantes };
-}
-
-/** Extrae el ID del modelo desde un enlace de Sketchfab (mismo criterio que la UI). */
-export function extraerIdSketchfab(url: string): string | null {
-  try {
-    const partes = url.trim().split("-");
-    const id = partes[partes.length - 1].replace(/\/+$/, "");
-    return id || null;
-  } catch {
-    return null;
-  }
 }

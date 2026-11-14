@@ -96,6 +96,7 @@ export function Header({ busquedaActual }: { busquedaActual?: string }) {
               id="busqueda-header"
               type="search"
               name="q"
+              maxLength={100}
               defaultValue={busquedaActual}
               placeholder="Busca"
               className="h-10 w-48 appearance-none rounded-none border border-museo-linea bg-white pl-3 pr-10 text-[0.9rem] text-black placeholder:text-museo-suave focus:border-museo-borde focus:outline-none focus-visible:outline-2 focus-visible:outline-museo-acento lg:w-56"

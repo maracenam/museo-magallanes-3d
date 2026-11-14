@@ -1,85 +1,54 @@
 import { NextResponse } from "next/server";
-import { crearClienteServidor } from "@/lib/supabase/server";
+import { errorInterno, errorJson, exigirAdmin, leerJson } from "@/lib/api";
+import { validarPieza } from "@/lib/seguridad";
 
 /**
  * GET /api/piezas
- * Uso del panel de administración: lista TODAS las piezas (publicadas y
- * ocultas). Requiere sesión de administrador — RLS ya lo exige, pero
- * además lo confirmamos aquí para dar un error claro.
+ * Panel de administración: lista TODAS las piezas (publicadas y ocultas).
+ * Exige sesión de administrador; RLS lo exige también en la base.
  */
-export async function GET() {
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export async function GET(request: Request) {
+  const acceso = await exigirAdmin(request, { modifica: false });
+  if (!acceso.ok) return acceso.respuesta;
 
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
-
-  const { data, error } = await supabase
+  const { data, error } = await acceso.supabase
     .from("piezas")
     .select("*")
     .order("creado_en", { ascending: false });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-  return NextResponse.json({ piezas: data });
+  if (error) return errorInterno("listar piezas", error);
+  return NextResponse.json(
+    { piezas: data },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 /**
  * POST /api/piezas
- * Guarda una pieza nueva. El administrador ya revisó manualmente la
- * ficha (y completó los campos_faltantes que quiso completar) en la
- * vista previa del prescrapper antes de llegar a este paso.
+ * Guarda una pieza nueva tras la revisión manual de la ficha. Todos los
+ * campos se validan (dominios permitidos, formatos y tamaños) antes de
+ * llegar a la base.
  */
 export async function POST(request: Request) {
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const acceso = await exigirAdmin(request, { modifica: true });
+  if (!acceso.ok) return acceso.respuesta;
 
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
+  const validacion = validarPieza(await leerJson(request), false);
+  if (!validacion.ok) return errorJson(validacion.error, 400);
+  const datos = validacion.datos;
 
-  const body = await request.json().catch(() => null);
-  const {
-    sketchfab_url,
-    sketchfab_model_id,
-    surdoc_url,
-    ficha,
-    imagen_url,
-    campos_faltantes,
-    titulo,
-    estado,
-  } = body ?? {};
-
-  if (!sketchfab_url || !sketchfab_model_id || !surdoc_url || !ficha) {
-    return NextResponse.json(
-      { error: "Faltan datos obligatorios para guardar la pieza." },
-      { status: 400 }
-    );
-  }
-
-  const { data, error } = await supabase
+  const { data, error } = await acceso.supabase
     .from("piezas")
     .insert({
-      sketchfab_url,
-      sketchfab_model_id,
-      surdoc_url,
-      ficha,
-      imagen_url: imagen_url ?? null,
-      campos_faltantes: campos_faltantes ?? [],
-      titulo: titulo ?? ficha?.["Título"] ?? null,
-      estado: estado === "publicada" ? "publicada" : "oculta",
+      ...datos,
+      imagen_url: datos.imagen_url ?? null,
+      campos_faltantes: datos.campos_faltantes ?? [],
+      titulo: datos.titulo ?? datos.ficha?.["Título"] ?? null,
+      estado: datos.estado ?? "oculta",
     })
     .select()
     .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return errorInterno("crear pieza", error);
   return NextResponse.json({ pieza: data }, { status: 201 });
 }

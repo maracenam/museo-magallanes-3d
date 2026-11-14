@@ -10,6 +10,14 @@ import { crearClienteNavegador } from "@/lib/supabase/client";
 /** Aviso cuando <EnlaceAuth /> rechaza un enlace del correo. */
 function AvisoEnlaceVencido() {
   const params = useSearchParams();
+  if (params.get("acceso") === "denegado") {
+    return (
+      <p className="mt-4 text-sm text-red-600">
+        Esta cuenta no tiene permiso para entrar al panel. Pide acceso al
+        administrador del sitio.
+      </p>
+    );
+  }
   if (params.get("enlace") !== "vencido") return null;
   return (
     <p className="mt-4 text-sm text-red-600">

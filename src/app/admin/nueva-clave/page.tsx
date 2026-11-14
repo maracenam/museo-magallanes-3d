@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { crearClienteNavegador } from "@/lib/supabase/client";
 
-const LARGO_MINIMO = 8;
+const LARGO_MINIMO = 12;
 
 /**
  * Define o cambia la contraseña de quien tiene la sesión abierta.

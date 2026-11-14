@@ -1,5 +1,4 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 /**
@@ -38,19 +37,5 @@ export async function crearClienteServidor() {
         },
       },
     }
-  );
-}
-
-/**
- * Cliente con la "service role key". Se salta RLS por completo.
- * SOLO usar dentro de Route Handlers protegidos, después de confirmar
- * que hay una sesión de administrador válida (ver src/middleware.ts).
- * Nunca exponer esta clave al navegador.
- */
-export function crearClienteAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
   );
 }

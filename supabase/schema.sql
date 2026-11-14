@@ -54,27 +54,13 @@ create trigger trg_piezas_actualizado
 -- =========================================================
 alter table piezas enable row level security;
 
--- El público (rol "anon") solo puede LEER piezas publicadas.
-drop policy if exists "publico_lee_publicadas" on piezas;
-create policy "publico_lee_publicadas"
-  on piezas for select
-  to anon
-  using (estado = 'publicada');
-
--- Cualquier usuario autenticado (el/los administrador/es del museo)
--- tiene acceso completo: ver todo, crear, editar, ocultar y eliminar.
--- Nota: por diseño hay un único rol de administrador; el acceso de
--- administración se controla dando de alta la cuenta en Supabase Auth,
--- no mediante roles adicionales dentro de la tabla.
-drop policy if exists "admin_acceso_total" on piezas;
-create policy "admin_acceso_total"
-  on piezas for all
-  to authenticated
-  using (true)
-  with check (true);
+-- Las políticas (lectura pública de piezas publicadas y acceso total
+-- solo para la lista blanca de administradores) están en
+-- supabase/seguridad.sql. EJECUTA ESE ARCHIVO A CONTINUACIÓN.
 
 -- =========================================================
--- Cómo crear la cuenta de administrador (una sola, según el proyecto):
--- Supabase Dashboard -> Authentication -> Users -> Add user
--- (correo + contraseña). No se requiere código adicional.
+-- Cómo crear la cuenta de administrador:
+-- 1. Supabase Dashboard -> Authentication -> Users -> Add user
+--    (correo + contraseña).
+-- 2. Agregarla a la lista blanca (ver el paso 4 de seguridad.sql).
 -- =========================================================
