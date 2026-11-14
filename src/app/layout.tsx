@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import "./globals.css";
 import { EnlaceAuth } from "@/components/EnlaceAuth";
 
@@ -15,11 +16,16 @@ export const viewport: Viewport = {
   themeColor: "#000000",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Leer las cabeceras hace que cada página se genere por petición, lo
+  // que permite que Next.js firme sus scripts con el nonce de la CSP
+  // (ver src/proxy.ts).
+  await headers();
+
   return (
     <html lang="es">
       <head>

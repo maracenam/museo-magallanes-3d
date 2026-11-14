@@ -1,68 +1,58 @@
 import { NextResponse } from "next/server";
-import { crearClienteServidor } from "@/lib/supabase/server";
-import { scrapearSurdoc, extraerIdSketchfab } from "@/lib/scraper/surdoc";
+import { errorJson, exigirAdmin, leerJson } from "@/lib/api";
+import { scrapearSurdoc } from "@/lib/scraper/surdoc";
+import { esUrlSurdoc, extraerIdSketchfab } from "@/lib/seguridad";
 
 /**
  * POST /api/surdoc
- * Body: { surdocUrl: string, sketchfabUrl: string }
+ * Body: { surdocUrl: string, sketchfabUrl?: string }
  *
- * Ejecuta el "prescrapper": lee la ficha oficial de SURDOC y la deja
- * lista para que el administrador la revise manualmente (vista previa)
- * antes de guardar la pieza. Solo accesible para el administrador
- * autenticado — no se expone al público.
+ * Ejecuta el "prescrapper": lee la ficha oficial de SURDOC para que el
+ * administrador la revise antes de guardar la pieza. Solo para el
+ * administrador. El servidor únicamente se conecta a https://surdoc.cl o
+ * https://www.surdoc.cl (protección contra SSRF).
  */
 export async function POST(request: Request) {
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const acceso = await exigirAdmin(request, { modifica: true });
+  if (!acceso.ok) return acceso.respuesta;
 
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  const cuerpo = (await leerJson(request)) as {
+    surdocUrl?: unknown;
+    sketchfabUrl?: unknown;
+  } | null;
+
+  if (!cuerpo?.surdocUrl) {
+    return errorJson("Falta el enlace de SURDOC.", 400);
   }
-
-  const body = await request.json().catch(() => null);
-  const surdocUrl: string | undefined = body?.surdocUrl;
-  const sketchfabUrl: string | undefined = body?.sketchfabUrl;
-
-  if (!surdocUrl) {
-    return NextResponse.json(
-      { error: "Falta el enlace de SURDOC." },
-      { status: 400 }
+  if (!esUrlSurdoc(cuerpo.surdocUrl)) {
+    return errorJson(
+      "El enlace debe ser una ficha de https://www.surdoc.cl.",
+      400
     );
   }
 
-  let urlValida: URL;
-  try {
-    urlValida = new URL(surdocUrl);
-  } catch {
-    return NextResponse.json(
-      { error: "El enlace de SURDOC no es una URL válida." },
-      { status: 400 }
-    );
-  }
-  if (!urlValida.hostname.endsWith("surdoc.cl")) {
-    return NextResponse.json(
-      { error: "El enlace debe pertenecer al dominio surdoc.cl." },
-      { status: 400 }
-    );
+  let sketchfabModelId: string | null = null;
+  if (cuerpo.sketchfabUrl) {
+    sketchfabModelId = extraerIdSketchfab(cuerpo.sketchfabUrl);
+    if (!sketchfabModelId) {
+      return errorJson(
+        "El enlace de Sketchfab no es válido. Usa el enlace de la página del modelo en https://sketchfab.com.",
+        400
+      );
+    }
   }
 
   try {
-    const resultado = await scrapearSurdoc(surdocUrl);
-    const sketchfabModelId = sketchfabUrl
-      ? extraerIdSketchfab(sketchfabUrl)
-      : null;
-
-    return NextResponse.json({ ...resultado, sketchfabModelId });
+    const resultado = await scrapearSurdoc(cuerpo.surdocUrl);
+    return NextResponse.json(
+      { ...resultado, sketchfabModelId },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
-    console.error("Error en prescrapper:", error);
-    return NextResponse.json(
-      {
-        error:
-          "No se pudo leer la ficha desde SURDOC. Verifica el enlace o inténtalo nuevamente.",
-      },
-      { status: 502 }
+    console.error("[api] prescrapper:", error);
+    return errorJson(
+      "No se pudo leer la ficha desde SURDOC. Verifica el enlace o inténtalo nuevamente.",
+      502
     );
   }
 }

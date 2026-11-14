@@ -1,95 +1,66 @@
 import { NextResponse } from "next/server";
-import { crearClienteServidor } from "@/lib/supabase/server";
+import { errorInterno, errorJson, exigirAdmin, leerJson } from "@/lib/api";
+import { esUuid, validarPieza } from "@/lib/seguridad";
 
 interface Contexto {
   params: Promise<{ id: string }>;
 }
 
 /** GET /api/piezas/:id — detalle para el panel de administración. */
-export async function GET(_request: Request, { params }: Contexto) {
+export async function GET(request: Request, { params }: Contexto) {
   const { id } = await params;
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
+  const acceso = await exigirAdmin(request, { modifica: false });
+  if (!acceso.ok) return acceso.respuesta;
+  if (!esUuid(id)) return errorJson("Pieza no encontrada.", 404);
 
-  const { data, error } = await supabase
+  const { data, error } = await acceso.supabase
     .from("piezas")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 404 });
-  }
-  return NextResponse.json({ pieza: data });
+  if (error) return errorInterno("leer pieza", error);
+  if (!data) return errorJson("Pieza no encontrada.", 404);
+  return NextResponse.json(
+    { pieza: data },
+    { headers: { "Cache-Control": "no-store" } }
+  );
 }
 
 /**
  * PUT /api/piezas/:id
- * Edita la ficha (por ejemplo tras re-ejecutar el prescrapper y revisar
- * cambios manualmente) o cambia el estado publicada/oculta.
+ * Edita la ficha o cambia el estado publicada/oculta. Solo se aceptan los
+ * campos de la pieza, ya validados.
  */
 export async function PUT(request: Request, { params }: Contexto) {
   const { id } = await params;
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
+  const acceso = await exigirAdmin(request, { modifica: true });
+  if (!acceso.ok) return acceso.respuesta;
+  if (!esUuid(id)) return errorJson("Pieza no encontrada.", 404);
 
-  const body = await request.json().catch(() => null);
-  if (!body) {
-    return NextResponse.json({ error: "Cuerpo inválido." }, { status: 400 });
-  }
+  const validacion = validarPieza(await leerJson(request), true);
+  if (!validacion.ok) return errorJson(validacion.error, 400);
 
-  const camposPermitidos = [
-    "ficha",
-    "imagen_url",
-    "campos_faltantes",
-    "titulo",
-    "estado",
-    "sketchfab_url",
-    "sketchfab_model_id",
-    "surdoc_url",
-  ];
-  const actualizacion: Record<string, unknown> = {};
-  for (const campo of camposPermitidos) {
-    if (campo in body) actualizacion[campo] = body[campo];
-  }
-
-  const { data, error } = await supabase
+  const { data, error } = await acceso.supabase
     .from("piezas")
-    .update(actualizacion)
+    .update(validacion.datos)
     .eq("id", id)
     .select()
-    .single();
+    .maybeSingle();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  if (error) return errorInterno("editar pieza", error);
+  if (!data) return errorJson("Pieza no encontrada.", 404);
   return NextResponse.json({ pieza: data });
 }
 
 /** DELETE /api/piezas/:id — elimina definitivamente una pieza del catálogo. */
-export async function DELETE(_request: Request, { params }: Contexto) {
+export async function DELETE(request: Request, { params }: Contexto) {
   const { id } = await params;
-  const supabase = await crearClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
-  }
+  const acceso = await exigirAdmin(request, { modifica: true });
+  if (!acceso.ok) return acceso.respuesta;
+  if (!esUuid(id)) return errorJson("Pieza no encontrada.", 404);
 
-  const { error } = await supabase.from("piezas").delete().eq("id", id);
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const { error } = await acceso.supabase.from("piezas").delete().eq("id", id);
+  if (error) return errorInterno("eliminar pieza", error);
   return NextResponse.json({ ok: true });
 }

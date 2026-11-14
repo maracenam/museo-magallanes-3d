@@ -19,18 +19,23 @@ de cada pieza (SURDOC), con panel de administración.
 
 1. Ve a [supabase.com](https://supabase.com) y crea un proyecto nuevo
    (plan gratuito).
-2. Abre **SQL Editor** y ejecuta el contenido de [`supabase/schema.sql`](./supabase/schema.sql).
-   Esto crea la tabla `piezas` y las reglas de seguridad (RLS): el público
-   solo puede leer piezas con estado `publicada`; el administrador
-   autenticado tiene acceso completo.
-3. Ve a **Authentication → Users → Add user** y crea **una sola cuenta**
-   (correo + contraseña) para el administrador del museo. El proyecto está
-   diseñado con un único rol de administrador: cualquier cuenta que exista
-   en este proyecto de Supabase puede entrar al panel.
-4. En **Project Settings → API** copia:
+2. Abre **SQL Editor** y ejecuta [`supabase/schema.sql`](./supabase/schema.sql)
+   y luego [`supabase/seguridad.sql`](./supabase/seguridad.sql). Esto crea
+   la tabla `piezas`, la lista blanca `administradores` y las reglas RLS:
+   el público solo lee piezas `publicada`; solo las cuentas de la lista
+   blanca pueden crear, editar o eliminar.
+3. Ve a **Authentication → Users → Add user** y crea la cuenta del
+   administrador (correo + contraseña). Luego agrégala a la lista blanca
+   con la consulta del paso 4 de `seguridad.sql`. **Una cuenta que no
+   esté en la lista blanca no puede entrar al panel.**
+4. En **Authentication → Sign In / Providers** desactiva **Allow new users
+   to sign up** (nadie debe poder crearse una cuenta por su cuenta) y en
+   **Authentication → Policies / Passwords** exige un largo mínimo de 12.
+5. En **Project Settings → API** copia:
    - `Project URL` → `NEXT_PUBLIC_SUPABASE_URL`
    - `anon public key` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `service_role key` → `SUPABASE_SERVICE_ROLE_KEY` (mantener en secreto)
+
+   La `service_role key` **no se usa**: no la copies a ningún lado.
 
 ## 2. Configurar variables de entorno
 
@@ -38,7 +43,7 @@ de cada pieza (SURDOC), con panel de administración.
 cp .env.example .env.local
 ```
 
-Completa `.env.local` con los tres valores anteriores.
+Completa `.env.local` con los dos valores anteriores.
 
 ## 3. Ejecutar en local
 
@@ -90,10 +95,36 @@ reemplaza la autenticación.
 1. Sube este proyecto a un repositorio de GitHub.
 2. En [vercel.com](https://vercel.com), **Add New → Project** e importa el
    repositorio.
-3. En **Environment Variables** agrega las mismas tres variables de
+3. En **Environment Variables** agrega las mismas dos variables de
    `.env.local`.
 4. Deploy. Vercel construye y publica el sitio automáticamente en cada
    cambio al repositorio.
+
+## Seguridad
+
+Medidas aplicadas (revisión de noviembre de 2026):
+
+- **Acceso al panel:** lista blanca de administradores en la base
+  (`administradores` + función `es_admin()`), verificada por RLS, por la
+  API y por `src/proxy.ts`. Si la función no existe, se niega el acceso.
+- **API:** cada ruta valida dominios (solo `surdoc.cl` y `sketchfab.com`),
+  formato del ID de Sketchfab, tipos y tamaños de la ficha, y descarta
+  campos no permitidos. Los errores no exponen detalles de la base.
+- **CSRF:** las peticiones que modifican datos exigen el mismo origen y
+  `Content-Type: application/json`.
+- **SSRF:** el prescrapper solo se conecta a `https://surdoc.cl` o
+  `https://www.surdoc.cl`, revalida cada redirección y limita tiempo
+  (10 s) y tamaño (3 MB).
+- **XSS:** Content Security Policy con nonce por petición; además, las
+  URLs se revalidan antes de mostrarse (nunca `javascript:` ni dominios
+  ajenos en enlaces, imágenes o el visor).
+- **Cabeceras:** HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`,
+  `Cross-Origin-Opener-Policy`, `frame-ancestors` (solo este sitio y
+  museodemagallanes.gob.cl pueden insertarlo en un iframe), sin
+  `X-Powered-By`. `/admin` y `/api` con `noindex` y `no-store`.
+- **Dependencias:** Next.js 16.4.6 o superior (corrige una ejecución remota
+  de código en el optimizador de imágenes). Revisa con `npm audit`.
+- **Secretos:** la service role key ya no se usa.
 
 ## Identidad visual
 
@@ -138,7 +169,9 @@ src/
     scraper/surdoc.ts          → lógica de extracción de datos SURDOC
     supabase/                  → clientes de Supabase (navegador y servidor)
     types.ts
-  middleware.ts                → protege /admin/* exigiendo sesión
+  proxy.ts                     → CSP con nonce y protección de /admin/*
+  lib/seguridad.ts             → validación de URLs, IDs y datos de piezas
+  lib/api.ts                   → control de acceso, CSRF y errores de la API
   components/                  → piezas de UI reutilizables
 supabase/schema.sql             → esquema de base de datos + RLS
 ```

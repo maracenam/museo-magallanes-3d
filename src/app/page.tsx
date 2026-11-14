@@ -2,16 +2,18 @@ import Link from "next/link";
 import { PaginaPublica } from "@/components/PaginaPublica";
 import { PieceCard } from "@/components/PieceCard";
 import { listarPiezasPublicadas } from "@/lib/piezas";
+import { limpiarBusqueda } from "@/lib/seguridad";
 
 export const revalidate = 60; // refresca el catálogo cada minuto
 
 interface Props {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string | string[] }>;
 }
 
 export default async function PaginaInicio({ searchParams }: Props) {
   const { q } = await searchParams;
-  const termino = q?.trim() || undefined;
+  // q puede llegar repetido (?q=a&q=b) o con basura: se normaliza.
+  const termino = limpiarBusqueda(Array.isArray(q) ? q[0] : q);
   const piezas = await listarPiezasPublicadas(termino);
 
   return (
@@ -38,6 +40,7 @@ export default async function PaginaInicio({ searchParams }: Props) {
             id="busqueda"
             type="search"
             name="q"
+            maxLength={100}
             defaultValue={termino}
             placeholder="Ingresa el nombre de la pieza..."
             className="h-[50px] w-full min-w-0 appearance-none sm:flex-1 rounded-none border border-museo-borde bg-white px-4 text-base text-black placeholder:text-museo-suave sm:text-[0.9rem]"
