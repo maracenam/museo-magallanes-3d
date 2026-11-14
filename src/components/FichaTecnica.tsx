@@ -1,31 +1,31 @@
+import { camposDeFicha } from "@/lib/ficha";
+
 /**
- * Panel de ficha técnica, inspirado en el bloque "Identificación" de
- * SURDOC: lista vertical de pares etiqueta/valor, sin cajas ni grillas,
- * separados por una línea sutil.
+ * Ficha técnica: lista de pares etiqueta/valor como el bloque
+ * "Identificación" de SURDOC, separados por una línea fina.
  */
 export function FichaTecnica({ ficha }: { ficha: Record<string, string> }) {
-  const entradas = Object.entries(ficha);
+  const campos = camposDeFicha(ficha);
 
-  if (entradas.length === 0) {
+  if (campos.length === 0) {
     return (
-      <p className="text-sm text-museo-texto/50">
+      <p className="mt-3 text-museo-suave">
         Esta pieza aún no tiene ficha técnica disponible.
       </p>
     );
   }
 
   return (
-    <div className="divide-y divide-black/10 border-t border-black/10">
-      {entradas.map(([clave, valor]) => (
-        <div key={clave} className="py-3">
-          <dt className="text-xs font-semibold uppercase tracking-wide text-museo-texto/50">
-            {clave}
-          </dt>
-          <dd className="mt-1 text-sm leading-relaxed text-museo-texto">
-            {valor}
-          </dd>
+    <dl className="mt-3 border-t border-museo-linea">
+      {campos.map(([clave, valor]) => (
+        <div
+          key={clave}
+          className="grid gap-x-6 gap-y-0.5 border-b border-museo-linea py-3 sm:grid-cols-[11rem_1fr]"
+        >
+          <dt className="font-semibold text-black">{clave}</dt>
+          <dd className="text-museo-cuerpo">{valor}</dd>
         </div>
       ))}
-    </div>
+    </dl>
   );
 }
