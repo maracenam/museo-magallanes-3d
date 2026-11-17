@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { limpiarFicha } from "@/lib/ficha";
 import type { ResultadoPrescrapper } from "@/lib/types";
 import { esUrlImagen, esUrlSurdoc } from "@/lib/seguridad";
 
@@ -78,7 +79,8 @@ const CAMPOS_ESPERADOS = [
   "Clasificación",
   "Objeto",
   "Creador",
-  "Materiales",
+  // SURDOC los publica juntos como "Técnica / Material".
+  "Material",
   "Técnica",
   "Dimensiones",
   "Procedencia",
@@ -252,6 +254,58 @@ function extraerDeNegritas(
   });
 }
 
+const limpiarTexto = (t: string) => t.replace(/\s+/g, " ").trim();
+
+/**
+ * Extractor específico para el HTML actual de SURDOC (sitio Drupal).
+ * Los extractores genéricos de arriba toman solo el primer par
+ * etiqueta/valor de cada bloque, y por eso perdían campos como
+ * "Dimensiones" o "Técnica / Material". SURDOC usa dos estructuras:
+ *
+ *  1. <div class="form-item"><label class="form-item__label">Etiqueta</label>
+ *       <div class="field-item">Valor</div></div>
+ *  2. <div class="field"><div class="field-label">Etiqueta</div>
+ *       <div class="field-item">Valor</div></div>
+ *
+ * Un "field" puede ser un grupo que contiene otros campos (por ejemplo
+ * "Adquisición"); en ese caso se omite el grupo y se leen sus hijos.
+ * Se ejecuta al final para que sus valores, más precisos, prevalezcan.
+ */
+function extraerDeSurdoc($: cheerio.CheerioAPI, ficha: Record<string, string>) {
+  $(".form-item").each((_, el) => {
+    const etiqueta = limpiarTexto(
+      $(el).children(".form-item__label").first().text()
+    );
+    const valor = limpiarTexto(
+      $(el).children(".field-item, .field-items").text()
+    );
+    if (etiqueta && valor && etiqueta.length < 70) ficha[etiqueta] = valor;
+  });
+
+  $(".field").each((_, el) => {
+    const etiqueta = limpiarTexto(
+      $(el).children(".field-label").first().text()
+    );
+    if (!etiqueta || etiqueta.length >= 70) return;
+
+    const contenido = $(el).children(".field-item, .field-items");
+    const esGrupo =
+      contenido.find(".field-label").length > 0 ||
+      contenido
+        .find(".form-item__label")
+        .toArray()
+        .some((l) => limpiarTexto($(l).text()) !== "");
+    if (esGrupo) {
+      // Si un extractor genérico guardó el grupo como texto pegado, fuera.
+      delete ficha[etiqueta];
+      return;
+    }
+
+    const valor = limpiarTexto(contenido.text());
+    if (valor) ficha[etiqueta] = valor;
+  });
+}
+
 /**
  * Lee una ficha pública de SURDOC y extrae sus metadatos + fotografía.
  * Además calcula qué campos "esperables" no se encontraron, para que
@@ -263,11 +317,14 @@ export async function scrapearSurdoc(
   const html = await descargarDeSurdoc(url);
   const $ = cheerio.load(html);
 
-  const ficha: Record<string, string> = {};
-  extraerPorFilaGenerica($, ficha);
-  extraerDeTablas($, ficha);
-  extraerDeDefiniciones($, ficha);
-  extraerDeNegritas($, ficha);
+  const bruta: Record<string, string> = {};
+  extraerPorFilaGenerica($, bruta);
+  extraerDeTablas($, bruta);
+  extraerDeDefiniciones($, bruta);
+  extraerDeNegritas($, bruta);
+  extraerDeSurdoc($, bruta);
+
+  const ficha = limpiarFicha(bruta);
 
   // Limpieza final: fuera valores vacíos o placeholders sin información real.
   for (const clave of Object.keys(ficha)) {

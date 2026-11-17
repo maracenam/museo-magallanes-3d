@@ -159,8 +159,20 @@ export function validarPieza(cuerpo: unknown, parcial: boolean): Resultado {
       return { ok: false, error: "El enlace de Sketchfab no es válido." };
     }
     datos.sketchfab_url = b.sketchfab_url;
-  }
-  if (presente("sketchfab_model_id")) {
+
+    // El ID del modelo se deriva siempre del enlace, para que el visor 3D
+    // y el enlace guardado no puedan quedar apuntando a modelos distintos
+    // (por ejemplo, al cambiar solo el enlace desde el panel).
+    const id = extraerIdSketchfab(b.sketchfab_url);
+    if (!id) {
+      return {
+        ok: false,
+        error:
+          "El enlace de Sketchfab no contiene el identificador del modelo. Copia la dirección completa desde sketchfab.com.",
+      };
+    }
+    datos.sketchfab_model_id = id.toLowerCase();
+  } else if (presente("sketchfab_model_id")) {
     if (!esIdSketchfab(b.sketchfab_model_id)) {
       return {
         ok: false,
