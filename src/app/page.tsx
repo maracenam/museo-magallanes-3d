@@ -1,20 +1,27 @@
 import Link from "next/link";
 import { PaginaPublica } from "@/components/PaginaPublica";
+import { Paginacion } from "@/components/Paginacion";
 import { PieceCard } from "@/components/PieceCard";
-import { listarPiezasPublicadas } from "@/lib/piezas";
+import { leerPagina, listarPiezasPublicadas } from "@/lib/piezas";
 import { limpiarBusqueda } from "@/lib/seguridad";
 
 export const revalidate = 60; // refresca el catálogo cada minuto
 
 interface Props {
-  searchParams: Promise<{ q?: string | string[] }>;
+  searchParams: Promise<{
+    q?: string | string[];
+    pagina?: string | string[];
+  }>;
 }
 
 export default async function PaginaInicio({ searchParams }: Props) {
-  const { q } = await searchParams;
-  // q puede llegar repetido (?q=a&q=b) o con basura: se normaliza.
+  const { q, pagina: paginaCruda } = await searchParams;
+  // q y pagina pueden llegar repetidos (?q=a&q=b) o con basura: se normalizan.
   const termino = limpiarBusqueda(Array.isArray(q) ? q[0] : q);
-  const piezas = await listarPiezasPublicadas(termino);
+  const { piezas, total, pagina, paginas } = await listarPiezasPublicadas(
+    termino,
+    leerPagina(Array.isArray(paginaCruda) ? paginaCruda[0] : paginaCruda)
+  );
 
   return (
     <PaginaPublica
@@ -62,16 +69,17 @@ export default async function PaginaInicio({ searchParams }: Props) {
           <p role="status" className="text-museo-suave">
             {termino ? (
               <>
-                {piezas.length === 1
+                {total === 1
                   ? "1 pieza encontrada"
-                  : `${piezas.length} piezas encontradas`}{" "}
+                  : `${total} piezas encontradas`}{" "}
                 para «{termino}»
               </>
-            ) : piezas.length === 1 ? (
+            ) : total === 1 ? (
               "1 pieza en la colección"
             ) : (
-              `${piezas.length} piezas en la colección`
+              `${total} piezas en la colección`
             )}
+            {paginas > 1 && ` · Página ${pagina} de ${paginas}`}
           </p>
           {termino && (
             <Link href="/" className="font-semibold text-black underline">
@@ -110,6 +118,8 @@ export default async function PaginaInicio({ searchParams }: Props) {
             ))}
           </ul>
         )}
+
+        <Paginacion pagina={pagina} paginas={paginas} termino={termino} />
       </section>
     </PaginaPublica>
   );
